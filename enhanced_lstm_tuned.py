@@ -184,11 +184,19 @@ def train_and_predict(ticker='AAPL', start_date='2020-01-01', end_date='2025-09-
         next_price_pred, next_trend_pred = model.predict(last_sequence)
         ensemble_next_price_preds.append(next_price_pred)
         ensemble_next_trend_preds.append(next_trend_pred)
+
+    # Debug: Print history lengths
+    print("History lengths:", [len(h.history['loss']) for h in histories])
     
-    #Updated plotting to include ensemble predictions
+    # Truncate histories to minimum length for averaging
     min_epochs = min(len(h.history['loss']) for h in histories)
-    avg_loss = np.mean([h.history['loss'] for h in histories], axis=0)
-    avg_val_loss = np.mean([h.history['val_loss'] for h in histories], axis=0)
+    truncated_losses = [h.history['loss'][:min_epochs] for h in histories]
+    truncated_val_losses = [h.history['val_loss'][:min_epochs] for h in histories]
+    avg_loss = np.mean(truncated_losses, axis=0)
+    avg_val_loss = np.mean(truncated_val_losses, axis=0)
+
+
+    #Updated plotting to include ensemble predictions
     plt.figure(figsize=(8, 4))
     plt.plot(avg_loss, label='Average Total Loss')
     plt.plot(avg_val_loss, label='Average Validation Loss')
@@ -245,5 +253,6 @@ def train_and_predict(ticker='AAPL', start_date='2020-01-01', end_date='2025-09-
 if __name__ == "__main__":
     train_and_predict(ticker='AAPL', start_date='2020-01-01', end_date='2025-09-13', look_back=120, max_epochs=50, tuner_trials=20)
     input("Press Enter to exit...")
+
 
 
