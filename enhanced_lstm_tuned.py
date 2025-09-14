@@ -13,7 +13,6 @@ import keras_tuner as kt
 from yfinance.exceptions import YFRateLimitError
 import matplotlib.pyplot as plt
 
-# Step 1: Fetch historical stock data
 def fetch_stock_data(ticker, start_date, end_date, max_retries=5):
     stock = yf.Ticker(ticker)
     for attempt in range(max_retries):
@@ -32,7 +31,6 @@ def fetch_stock_data(ticker, start_date, end_date, max_retries=5):
                 raise
     raise YFRateLimitError("Max retries exceeded.")
 
-# Step 2: Compute technical indicators
 def compute_indicators(df):
     df['SMA_20'] = df['Close'].rolling(window=20).mean()
     df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
@@ -63,7 +61,6 @@ def compute_indicators(df):
     df = df.dropna()
     return df
 
-# Step 3: Prepare data for LSTM
 def prepare_data(df, look_back=120):  # Updated to match your call
     features = ['Close', 'Volume', 'SMA_20', 'EMA_50', 'RSI_14', 'MACD', 'BB_upper', 'BB_lower', 'Stochastic_K', 'ATR_14']
     
@@ -89,7 +86,6 @@ def prepare_data(df, look_back=120):  # Updated to match your call
     
     return X_train, X_test, y_price_train, y_price_test, y_trend_train, y_trend_test, scaler, df, features
 
-# Step 4: LSTM model builder for Keras Tuner
 def build_lstm_model(hp):
     num_features = hp.Fixed('num_features', 10)
     look_back = hp.Fixed('look_back', 120)  # Updated to match your call
@@ -101,18 +97,20 @@ def build_lstm_model(hp):
         x = LSTM(units=hp.Int(f'units_{i}', min_value=50, max_value=150, step=50), return_sequences=(i < num_layers - 1))(x)
         x = Dropout(hp.Float(f'dropout_{i}', min_value=0.1, max_value=0.3, step=0.1))(x)
     
-    # Explicitly define output layers with consistent names
-    price_output = Dense(1, name='price_output')(x)  # Renamed to avoid conflict
-    trend_output = Dense(1, activation='sigmoid', name='trend_output')(x)  # Renamed to avoid conflict
+    # Price output (regression)
+    price_output = Dense(1, name='price_output')(x)
+    
+    # Trend output (classification with deeper branch)
+    trend_hidden = Dense(10, activation='relu')(x)
+    trend_output = Dense(1, activation='sigmoid', name='trend_output')(trend_hidden)
     
     model = Model(inputs=input_layer, outputs=[price_output, trend_output])
     model.compile(optimizer=Adam(learning_rate=hp.Float('learning_rate', min_value=1e-4, max_value=1e-2, sampling='log')),
                   loss={'price_output': 'mean_squared_error', 'trend_output': 'binary_crossentropy'},
-                  loss_weights={'price_output': 0.7, 'trend_output': 0.3},
+                  loss_weights={'price_output': 0.5, 'trend_output': 0.5},  # Balanced weights
                   metrics={'price_output': 'mae', 'trend_output': 'accuracy'})
     return model
 
-# Step 5: Train and evaluate the model with hyperparameter tuning
 def train_and_predict(ticker='AAPL', start_date='2020-01-01', end_date='2025-09-13', look_back=120, max_epochs=50, tuner_trials=10):
     tuner_dir = 'tuner_dir'
     if os.path.exists(tuner_dir):
@@ -136,6 +134,8 @@ def train_and_predict(ticker='AAPL', start_date='2020-01-01', end_date='2025-09-
     
     df = compute_indicators(df)
     X_train, X_test, y_price_train, y_price_test, y_trend_train, y_trend_test, scaler, df, features = prepare_data(df, look_back)
+
+    trend_class_weight = {0: 1.0, 1: 1.5}  #Adjusting for trend imbalance - can be adjusted if needed
     
     tuner = kt.RandomSearch(build_lstm_model,
                             objective='val_loss',
@@ -212,4 +212,5 @@ def train_and_predict(ticker='AAPL', start_date='2020-01-01', end_date='2025-09-
 
 if __name__ == "__main__":
     train_and_predict(ticker='AAPL', start_date='2020-01-01', end_date='2025-09-13', look_back=120, max_epochs=50, tuner_trials=10)
+
     input("Press Enter to exit...")
