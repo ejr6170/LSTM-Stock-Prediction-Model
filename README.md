@@ -10,7 +10,7 @@ Currently only implemented Apple (APPL) stock to the model, in the near future i
 *Made Using*
 - *Pandas #Data Manipulation*
 - *yFinance #Stock Data*
-- *TensorFlow #LLM*
+- *TensorFlow #ML*
 - *SKLearn #Normalize Data*
 - *MatPlotLib #Visualization*
 - *Keras Tuner #Hyperparameter tuning*
