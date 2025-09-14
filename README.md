@@ -15,7 +15,7 @@ Reduced test RMSE from 14.06 to 7.19 (~49%)!!!
 Trend accuracy still needs a lot of work, same with the entire model as its pretty barebones but its a start. 
 
 Features
-- 10 Technical Indicators
+- 10 Technical Indicators (SMA, EMA, RSI, MACD, BB Upper & Lower, Stochastic K, ATR)
 - Volume Indicator
 - Visual plot representation of the model & prediction
 - HyperParameter Tuning
