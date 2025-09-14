@@ -185,7 +185,8 @@ def train_and_predict(ticker='AAPL', start_date='2020-01-01', end_date='2025-09-
         ensemble_next_price_preds.append(next_price_pred)
         ensemble_next_trend_preds.append(next_trend_pred)
     
-    #Updated plotting to include ensemble predictions 
+    #Updated plotting to include ensemble predictions
+    min_epochs = min(len(h.history['loss']) for h in histories)
     avg_loss = np.mean([h.history['loss'] for h in histories], axis=0)
     avg_val_loss = np.mean([h.history['val_loss'] for h in histories], axis=0)
     plt.figure(figsize=(8, 4))
@@ -244,4 +245,5 @@ def train_and_predict(ticker='AAPL', start_date='2020-01-01', end_date='2025-09-
 if __name__ == "__main__":
     train_and_predict(ticker='AAPL', start_date='2020-01-01', end_date='2025-09-13', look_back=120, max_epochs=50, tuner_trials=20)
     input("Press Enter to exit...")
+
 
