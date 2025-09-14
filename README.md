@@ -23,7 +23,7 @@ Features
 Train Price RMSE: 5.44                                                                                                                                                                               Test Price RMSE: 7.19  
 
 How this script works -
-- Retrieves Apple's stock data from 2020 to 2025 using yfinance 
+- Retrieves Apple's OHLCV stock data from 2020 to 2025 using yfinance 
 - Creates sequences for LSTM input and prepares multi-output targets(price and trend)
 - leverages hyperparameter tuning, thanks to Keras Tuner
 - Trains the model with early stopping and evalutaes it on a train/test split(80/20)
