@@ -146,45 +146,79 @@ def train_and_predict(ticker='AAPL', start_date='2020-01-01', end_date='2025-09-
     early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
     tuner.search(X_train, [y_price_train, y_trend_train], epochs=20, validation_split=0.2, callbacks=[early_stopping])
     
-    best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
-    print("Best Hyperparameters:")
-    print(f"Number of Layers: {best_hps.get('num_layers')}")
-    for i in range(best_hps.get('num_layers')):
-        print(f"Layer {i+1} Units: {best_hps.get(f'units_{i}')}, Dropout: {best_hps.get(f'dropout_{i}')}")
-    print(f"Learning Rate: {best_hps.get('learning_rate')}")
+    # Get top 3 hyperparameteres for ensemble
+    top_hps = tuner.get_best_hyperparameters(num_trials=3)
+    print("Top 3 Hyperparameters for Ensemble:")
+    for j, hps in enumerate(top_hps):
+        print(f"Model {j+1}:")
+        print(f"Number of Layers: {hps.get('num_layers')}")
+        for i in range(hps.get('num_layers')):
+            print(f"Layer {i+1} Units: {hps.get(f'units_{i}')}, Dropout: {hps.get(f'dropout_{i}')}")
+        print(f"Learning Rate: {hps.get('learning_rate')}")
+
+    # Train ensemble models with top 3 hyperparameters 
+    ensemble_price_train_preds = []
+    ensemble_price_test_preds = []
+    ensemble_trend_train_preds = []
+    ensemble_trend_test_preds = []
+    ensemble_next_price_preds = []
+    ensemble_next_trend_preds = []
+    histories = []
     
-    model = tuner.hypermodel.build(best_hps)
-    history = model.fit(X_train, [y_price_train, y_trend_train], epochs=max_epochs, batch_size=32,
-                        validation_split=0.2, callbacks=[early_stopping], verbose=1)
+      for hps in top_hps:
+        model = tuner.hypermodel.build(hps)
+        history = model.fit(X_train, [y_price_train, y_trend_train], epochs=max_epochs, batch_size=32,
+                            validation_split=0.2, callbacks=[early_stopping], verbose=1, class_weight={'trend_output': trend_class_weight})
+
+        #Ensemble predictions 
+        train_predict_price, train_predict_trend = model.predict(X_train)
+        test_predict_price, test_predict_trend = model.predict(X_test)
+        ensemble_price_train_preds.append(train_predict_price)
+        ensemble_price_test_preds.append(test_predict_price)
+        ensemble_trend_train_preds.append(train_predict_trend)
+        ensemble_trend_test_preds.append(test_predict_trend)
+
+        #Next day predictions
+        last_sequence = scaler.transform(df[features].values[-look_back:])
+        last_sequence = np.reshape(last_sequence, (1, look_back, len(features)))
+        next_price_pred, next_trend_pred = model.predict(last_sequence)
+        ensemble_next_price_preds.append(next_price_pred)
+        ensemble_next_trend_preds.append(next_trend_pred)
     
+    #Updated plotting to include ensemble predictions 
+    avg_loss = np.mean([h.history['loss'] for h in histories], axis=0)
+    avg_val_loss = np.mean([h.history['val_loss'] for h in histories], axis=0)
     plt.figure(figsize=(8, 4))
-    plt.plot(history.history['loss'], label='Total Loss')
-    plt.plot(history.history['val_loss'], label='Validation Loss')
-    plt.title('Training and Validation Loss')
+    plt.plot(avg_loss, label='Average Total Loss')
+    plt.plot(avg_val_loss, label='Average Validation Loss')
+    plt.title('Ensemble Average Training and Validation Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.legend()
     plt.show()
     
-    train_predict_price, train_predict_trend = model.predict(X_train)
-    test_predict_price, test_predict_trend = model.predict(X_test)
+   #Ensemble predictions (average for price, majority vote for trend)
+    avg_train_price = np.mean(ensemble_price_train_preds, axis=0)
+    avg_test_price = np.mean(ensemble_price_test_preds, axis=0)
+    train_trend_votes = np.round(np.mean(ensemble_trend_train_preds, axis=0)).astype(int).flatten()
+    test_trend_votes = np.round(np.mean(ensemble_trend_test_preds, axis=0)).astype(int).flatten()
     
     price_scaler = MinMaxScaler(feature_range=(0, 1))
     price_scaler.min_, price_scaler.scale_ = scaler.min_[0], scaler.scale_[0]
     def inverse_price(pred_price):
         return price_scaler.inverse_transform(pred_price.reshape(-1, 1)).flatten()
     
-    train_predict_price_inv = inverse_price(train_predict_price)
+    train_predict_price_inv = inverse_price(avg_train_price)
     y_price_train_inv = inverse_price(y_price_train.reshape(-1, 1))
-    test_predict_price_inv = inverse_price(test_predict_price)
+    test_predict_price_inv = inverse_price(avg_test_price)
     y_price_test_inv = inverse_price(y_price_test.reshape(-1, 1))
     
     plt.figure(figsize=(12, 6))
-    plt.plot(df.index[look_back:look_back + len(train_predict_price_inv)], train_predict_price_inv, label='Train Price Predictions')
+    plt.plot(df.index[look_back:look_back + len(train_predict_price_inv)], train_predict_price_inv, label='Ensemble Train Price Predictions')
     plt.plot(df.index[look_back:look_back + len(train_predict_price_inv)], y_price_train_inv, label='Actual Train Prices')
-    plt.plot(df.index[look_back + len(train_predict_price_inv):], test_predict_price_inv, label='Test Price Predictions')
+    plt.plot(df.index[look_back + len(train_predict_price_inv):], test_predict_price_inv, label='Ensemble Test Price Predictions')
     plt.plot(df.index[look_back + len(train_predict_price_inv):], y_price_test_inv, label='Actual Test Prices')
-    plt.title(f'{ticker} Stock Price Prediction (Tuned Model)')
+    plt.title(f'{ticker} Stock Price Prediction (Ensemble Tuned Model)')
     plt.xlabel('Date')
     plt.ylabel('Price (USD)')
     plt.legend()
@@ -192,25 +226,22 @@ def train_and_predict(ticker='AAPL', start_date='2020-01-01', end_date='2025-09-
     
     train_rmse = np.sqrt(np.mean((train_predict_price_inv - y_price_train_inv) ** 2))
     test_rmse = np.sqrt(np.mean((test_predict_price_inv - y_price_test_inv) ** 2))
-    print(f'Train Price RMSE: {train_rmse:.2f}')
-    print(f'Test Price RMSE: {test_rmse:.2f}')
+    print(f'Ensemble Train Price RMSE: {train_rmse:.2f}')
+    print(f'Ensemble Test Price RMSE: {test_rmse:.2f}')
     
-    train_trend_pred = (train_predict_trend > 0.5).astype(int).flatten()
-    test_trend_pred = (test_predict_trend > 0.5).astype(int).flatten()
-    train_trend_acc = np.mean(train_trend_pred == y_trend_train)
-    test_trend_acc = np.mean(test_trend_pred == y_trend_test)
-    print(f'Train Trend Accuracy: {train_trend_acc:.2f}')
-    print(f'Test Trend Accuracy: {test_trend_acc:.2f}')
+    train_trend_acc = np.mean(train_trend_votes == y_trend_train)
+    test_trend_acc = np.mean(test_trend_votes == y_trend_test)
+    print(f'Ensemble Train Trend Accuracy: {train_trend_acc:.2f}')
+    print(f'Ensemble Test Trend Accuracy: {test_trend_acc:.2f}')
     
-    last_sequence = scaler.transform(df[features].values[-look_back:])
-    last_sequence = np.reshape(last_sequence, (1, look_back, len(features)))
-    next_price_pred, next_trend_pred = model.predict(last_sequence)
-    next_price_inv = inverse_price(next_price_pred)
-    next_trend = 'Up' if next_trend_pred[0][0] > 0.5 else 'Down'
-    print(f'Predicted next day price for {ticker}: ${next_price_inv[0]:.2f}')
-    print(f'Predicted next day trend for {ticker}: {next_trend}')
+    avg_next_price_pred = np.mean(ensemble_next_price_preds, axis=0)
+    avg_next_trend_pred = np.mean(ensemble_next_trend_preds, axis=0)
+    next_price_inv = inverse_price(avg_next_price_pred)
+    next_trend = 'Up' if avg_next_trend_pred[0][0] > 0.5 else 'Down'
+    print(f'Ensemble Predicted next day price for {ticker}: ${next_price_inv[0]:.2f}')
+    print(f'Ensemble Predicted next day trend for {ticker}: {next_trend}')
 
 if __name__ == "__main__":
-    train_and_predict(ticker='AAPL', start_date='2020-01-01', end_date='2025-09-13', look_back=120, max_epochs=50, tuner_trials=10)
-
+    train_and_predict(ticker='AAPL', start_date='2020-01-01', end_date='2025-09-13', look_back=120, max_epochs=50, tuner_trials=20)
     input("Press Enter to exit...")
+
