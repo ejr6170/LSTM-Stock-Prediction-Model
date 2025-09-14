@@ -9,7 +9,6 @@ from tensorflow.keras.layers import LSTM, Dense, Dropout
 from yfinance.exceptions import YFRateLimitError
 import matplotlib.pyplot as plt
 
-# Step 1: Fetch historical stock data
 def fetch_stock_data(ticker, start_date, end_date, max_retries=5):
     stock = yf.Ticker(ticker)
     for attempt in range(max_retries):
@@ -28,7 +27,6 @@ def fetch_stock_data(ticker, start_date, end_date, max_retries=5):
                 raise
     raise YFRateLimitError("Max retries exceeded.")
 
-# Step 2: Prepare data for LSTM
 def prepare_data(df, look_back=60):
     # Normalize the data
     scaler = MinMaxScaler(feature_range=(0, 1))
@@ -51,7 +49,6 @@ def prepare_data(df, look_back=60):
     
     return X_train, X_test, y_train, y_test, scaler
 
-# Step 3: Build the LSTM model
 def build_lstm_model(look_back):
     model = Sequential()
     model.add(LSTM(units=50, return_sequences=True, input_shape=(look_back, 1)))
@@ -62,7 +59,6 @@ def build_lstm_model(look_back):
     model.compile(optimizer='adam', loss='mean_squared_error')
     return model
 
-# Step 4: Train and evaluate the model
 def train_and_predict(ticker='AAPL', start_date='2023-01-01', end_date='2025-09-13', look_back=60, epochs=30):
     # Cache data locally
     cache_file = f"{ticker}_stock_data.csv"
@@ -104,18 +100,15 @@ def train_and_predict(ticker='AAPL', start_date='2023-01-01', end_date='2025-09-
     plt.savefig('stock_plot.png')
     plt.show()
     
-    # Calculate RMSE for evaluation
     train_rmse = np.sqrt(np.mean((train_predict - y_train_inv.T) ** 2))
     test_rmse = np.sqrt(np.mean((test_predict - y_test_inv.T) ** 2))
     
-    # Save and print RMSE
     with open('rmse_results.txt', 'w') as f:
         f.write(f'Train RMSE: {train_rmse:.2f}\n')
         f.write(f'Test RMSE: {test_rmse:.2f}\n')
     print(f'Train RMSE: {train_rmse:.2f}')
     print(f'Test RMSE: {test_rmse:.2f}')
-    
-    # Predict the next day's price
+
     last_sequence = df['Close'].values[-look_back:]
     last_sequence = scaler.transform(last_sequence.reshape(-1, 1))
     last_sequence = np.reshape(last_sequence, (1, look_back, 1))
@@ -123,7 +116,7 @@ def train_and_predict(ticker='AAPL', start_date='2023-01-01', end_date='2025-09-
     next_price = scaler.inverse_transform(next_price)[0][0]
     print(f'Predicted next day price for {ticker}: ${next_price:.2f}')
 
-# Run the model
 if __name__ == "__main__":
     train_and_predict(ticker='AAPL', start_date='2023-01-01', end_date='2025-09-13', look_back=60, epochs=30)
+
     input("Press Enter to exit...")  # Keeps terminal open to view output
