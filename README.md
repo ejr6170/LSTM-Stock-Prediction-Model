@@ -16,16 +16,12 @@ Currently only implemented Apple (APPL) stock to the model, in the near future i
 - *Keras Tuner #Hyperparameter tuning*
 - *Python #of course...*
 
-**Reduced test RMSE from 14.06 to 7.19 (~49%)!!!**
 
 # Features
 - 10 Technical Indicators (SMA, EMA, RSI, MACD, BB Upper & Lower, Stochastic K, ATR)
 - Volume Indicator
 - Visual plot representation of the model & prediction
 - HyperParameter Tuning
-
-Train Price RMSE: 5.44  
-Test Price RMSE: 7.19  
 
 ## How this script works 
 - Retrieves Apple's OHLCV stock data from 2020 to 2025 using yfinance 
