@@ -89,20 +89,18 @@ def prepare_data(df, look_back=120):  # Updated to match your call
 def build_lstm_model(hp):
     num_features = hp.Fixed('num_features', 10)
     look_back = hp.Fixed('look_back', 120)  # Updated to match your call
+    batch_size = hp.int('batch_size', min_value=16, max_value=64, step=16)
     input_layer = Input(shape=(look_back, num_features))
     
     x = input_layer
     num_layers = hp.Int('num_layers', min_value=2, max_value=4, step=1)
     for i in range(num_layers):
         x = LSTM(units=hp.Int(f'units_{i}', min_value=50, max_value=150, step=50), return_sequences=(i < num_layers - 1))(x)
-        x = Dropout(hp.Float(f'dropout_{i}', min_value=0.1, max_value=0.3, step=0.1))(x)
+        x = Dropout(hp.Float(f'dropout_{i}', min_value=0.1, max_value=0.4, step=0.1))(x)
     
     # Price output (regression)
     price_output = Dense(1, name='price_output')(x)
-    
-    # Trend output (classification with deeper branch)
-    trend_hidden = Dense(10, activation='relu')(x)
-    trend_output = Dense(1, activation='sigmoid', name='trend_output')(trend_hidden)
+    trend_output = Dense(1, activation='sigmoid', name='trend_output')(x)
     
     model = Model(inputs=input_layer, outputs=[price_output, trend_output])
     model.compile(optimizer=Adam(learning_rate=hp.Float('learning_rate', min_value=1e-4, max_value=1e-2, sampling='log')),
@@ -134,17 +132,19 @@ def train_and_predict(ticker='AAPL', start_date='2020-01-01', end_date='2025-09-
     
     df = compute_indicators(df)
     X_train, X_test, y_price_train, y_price_test, y_trend_train, y_trend_test, scaler, df, features = prepare_data(df, look_back)
-
-    trend_class_weight = {0: 1.0, 1: 1.5}  #Adjusting for trend imbalance - can be adjusted if needed
     
-    tuner = kt.RandomSearch(build_lstm_model,
-                            objective='val_loss',
-                            max_trials=tuner_trials,
-                            executions_per_trial=1,
-                            directory='tuner_dir',
-                            project_name='lstm_stock_tuning')
+    tuner = kt.RandomSearch(
+        build_lstm_model,
+        objective='val_loss',
+        max_trials=tuner_trials,
+        executions_per_trial=1,
+        directory='tuner_dir',
+        project_name='lstm_stock_tuning',
+        overwrite=True
+    )
     early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
-    tuner.search(X_train, [y_price_train, y_trend_train], epochs=20, validation_split=0.2, callbacks=[early_stopping])
+    tuner.search(X_train, [y_price_train, y_trend_train], epochs=20, validation_split=0.2,
+                callbacks=[early_stopping]) 
     
     # Get top 3 hyperparameteres for ensemble
     top_hps = tuner.get_best_hyperparameters(num_trials=3)
@@ -251,8 +251,9 @@ def train_and_predict(ticker='AAPL', start_date='2020-01-01', end_date='2025-09-
     print(f'Ensemble Predicted next day trend for {ticker}: {next_trend}')
 
 if __name__ == "__main__":
-    train_and_predict(ticker='AAPL', start_date='2020-01-01', end_date='2025-09-13', look_back=120, max_epochs=50, tuner_trials=20)
+    train_and_predict(ticker='AAPL', start_date='2020-01-01', end_date='2025-09-13', look_back=60, max_epochs=50, tuner_trials=30)
     input("Press Enter to exit...")
+
 
 
 
